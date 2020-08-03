@@ -8,10 +8,18 @@ resource "azurerm_data_factory" "this" {
   location            = data.azurerm_resource_group.this.location
   resource_group_name = data.azurerm_resource_group.this.name
 
-  dynamic "identity" {
-    for_each = coalesce(lookup(each.value, "assign_identity"), false) == false ? [] : list(lookup(each.value, "assign_identity", false))
+  identity {
+    type = "SystemAssigned"
+  }
+
+  dynamic "github_configuration" {
+    for_each = lookup(var.github_configuration, "github_configuration", null) == null ? [] : [lookup(var.github_configuration, "github_configuration", null)]
     content {
-      type = "SystemAssigned"
+      account_name    = github_configuration.value.account_name
+      branch_name     = github_configuration.value.branch_name
+      git_url         = github_configuration.value.git_url
+      repository_name = github_configuration.value.repository_name
+      root_folder     = github_configuration.value.root_folder
     }
   }
 
@@ -25,5 +33,25 @@ resource "azurerm_data_factory" "this" {
       root_folder     = vsts_configuration.value.root_folder
       tenant_id       = vsts_configuration.value.tenant_id
     }
+  }
+}
+
+resource "azurerm_monitor_diagnostic_setting" "logs" {
+  count                      = var.diagnostics.enable ? 1 : 0
+  name                       = format("%v-diagnostics", azurerm_data_factory.this.name)
+  target_resource_id         = azurerm_data_factory.this.id
+  log_analytics_workspace_id = var.diagnostics.workspace_id
+
+  log {
+    category = "ActivityRuns"
+  }
+  log {
+    category = "PipelineRuns"
+  }
+  log {
+    category = "TriggerRuns"
+  }
+  metric {
+    category = "AllMetrics"
   }
 }
